@@ -1,0 +1,4 @@
+log,events,objects,f_global,f_order,f_item,binding_recall,time_s
+Log A (perfect),400,200,0.8889,0.9167,0.875,N/A,0.0055
+Log B (mild),388,200,0.8177,0.8672,0.7916,N/A,0.0048
+Log C (severe),400,200,0.8508,0.8067,0.875,250%,0.0052

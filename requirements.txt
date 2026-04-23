@@ -1,0 +1,8 @@
+# OC-TBR — requirements
+# Core library: no mandatory dependencies (stdlib only)
+
+# For running experiments
+pytest>=7.0
+
+# Optional: load real OCEL 2.0 logs and alignment baseline
+# pm4py>=2.7
