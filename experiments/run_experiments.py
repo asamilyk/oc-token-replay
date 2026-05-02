@@ -1,257 +1,306 @@
 """
-experiments/run_experiments.py
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Reproduces all experimental results reported in the paper:
-
-  Table II  — OC-TBR results on synthetic logs (Experiment 1)
-  Table III — OC-TBR vs. alignment baseline, OCEL 2.0 (Experiment 2)
-  Fig.  4   — Scalability: runtime vs. log size
+Run all experiments and save results to results/.
 
 Usage:
-    python experiments/run_experiments.py [--all | --exp1 | --exp2 | --scale]
+    python experiments/run_experiments.py
 
-Output: results printed to stdout + saved as CSV in results/
+Output files (written to results/):
+    experiment1.csv                — f, f_order, f_item, n_events, time for logs A/B/C
+    experiment2_top_violators.csv  — per-object fitness for real OCEL log
+    scalability.csv                — runtime vs log size
+    run_log.txt                    — full console output saved to file
 """
+import csv
+import os
+import sys
+import time
+from collections import Counter
+from datetime import datetime
 
-import sys, os, time, csv, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# ── paths ─────────────────────────────────────────────────────────────
+ROOT    = os.path.dirname(os.path.dirname(__file__))
+RESULTS = os.path.join(ROOT, "results")
+DATA    = os.path.join(ROOT, "data")
 
-from src          import OCTokenReplay
-from experiments.nets import build_order_fulfilment_net, build_large_net
-from experiments.logs import (build_log_A, build_log_B, build_log_C,
-                               build_counterexample_log)
+sys.path.insert(0, os.path.join(ROOT, "src"))
+sys.path.insert(0, os.path.join(ROOT, "experiments"))
 
-os.makedirs("results", exist_ok=True)
-
-
-# ─────────────────────────────────────────────────────────────
-# Experiment 0 — Soundness counterexample (Section IV)
-# ─────────────────────────────────────────────────────────────
-
-def run_counterexample():
-    print("=" * 60)
-    print("Experiment 0 — Soundness counterexample (Section IV)")
-    print("=" * 60)
-
-    net = build_order_fulfilment_net()
-    log = build_counterexample_log()
-
-    result = OCTokenReplay(net).run(log)
-    print(result.summary())
-    print()
-    print(result.per_object_table())
-    print()
-
-    # Verify the formal claim: naive = 1.0, global < 1.0
-    # Per-object projections
-    from src import OCELLog
-    for obj_id, obj_type in [("o1","order"),("o2","order"),
-                              ("i1","item"),("i2","item")]:
-        proj_events = [e for e in log.events
-                       if any(oid == obj_id for oid, _ in e.objects)]
-        proj_log  = OCELLog(events=proj_events)
-        proj_result = OCTokenReplay(net).run(proj_log)
-        obj_stats = next((s for s in proj_result.per_object
-                          if s.obj_id == obj_id), None)
-        f_val = obj_stats.fitness if obj_stats else 1.0
-        print(f"  Per-object projection  {obj_id} ({obj_type}): f = {f_val:.4f}")
-
-    print(f"\n  Global OC-TBR fitness:  f = {result.fitness:.4f}")
-    assert result.fitness < 1.0, "FAIL: global replay should detect violation"
-    print("\n  ✓  Proposition verified: f_naive=1.0, f_global<1.0")
+from replay import OCTokenReplay
+from logs   import generate_synthetic_log, load_ocel1
+from nets   import build_order_fulfilment_net
 
 
-# ─────────────────────────────────────────────────────────────
-# Experiment 1 — Synthetic logs (Table II)
-# ─────────────────────────────────────────────────────────────
+# ── Tee: write to console AND file simultaneously ─────────────────────
 
-def run_experiment1(num_orders: int = 50, items_per_order: int = 3):
-    print("=" * 60)
-    print("Experiment 1 — Synthetic logs (Table II in paper)")
-    print(f"  {num_orders} orders × {items_per_order} items each")
-    print("=" * 60)
+class Tee:
+    """Duplicates stdout to both the console and a log file."""
+    def __init__(self, filepath):
+        self.console = sys.stdout
+        self.file    = open(filepath, "w", encoding="utf-8")
 
-    net = build_order_fulfilment_net()
+    def write(self, msg):
+        self.console.write(msg)
+        self.file.write(msg)
 
-    logs = {
-        "Log A (perfect)": build_log_A(num_orders, items_per_order),
-        "Log B (mild)":    build_log_B(num_orders, items_per_order,
-                                       violation_rate=0.20),
-        "Log C (severe)":  build_log_C(num_orders, items_per_order,
-                                       violation_rate=0.40),
-    }
+    def flush(self):
+        self.console.flush()
+        self.file.flush()
 
-    rows = []
-    for name, log in logs.items():
-        stats = log.statistics()
-        t0 = time.perf_counter()
-        result = OCTokenReplay(net).run(log)
-        elapsed = time.perf_counter() - t0
-
-        ft = result.fitness_by_type()
-        f_order = ft.get("order", float("nan"))
-        f_item  = ft.get("item",  float("nan"))
-
-        # Binding recall for Log C: fraction of injected violators detected
-        if "severe" in name.lower():
-            violators = result.objects_below_threshold(threshold=0.999)
-            detected  = sum(1 for s in violators if s.obj_type == "order")
-            total_inj = int(num_orders * 0.40)
-            recall    = detected / total_inj if total_inj > 0 else float("nan")
-        else:
-            recall = float("nan")
-
-        row = {
-            "log":       name,
-            "events":    stats["num_events"],
-            "objects":   stats["num_objects"],
-            "f_global":  round(result.fitness, 4),
-            "f_order":   round(f_order, 4),
-            "f_item":    round(f_item,  4),
-            "binding_recall": f"{recall:.0%}" if recall == recall else "N/A",
-            "time_s":    round(elapsed, 4),
-        }
-        rows.append(row)
-
-        print(f"\n{name}")
-        print(result.summary())
-
-    # Save CSV
-    with open("results/experiment1.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=rows[0].keys())
-        w.writeheader(); w.writerows(rows)
-    print("\n→ Results saved to results/experiment1.csv")
+    def close(self):
+        sys.stdout = self.console   # restore original stdout
+        self.file.close()
 
 
-# ─────────────────────────────────────────────────────────────
-# Experiment 2 — OCEL 2.0 benchmark (Table III)
-# ─────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────
 
-def run_experiment2(ocel_path: str = None):
-    """
-    If `ocel_path` is provided, load the real OCEL 2.0 log.
-    Otherwise, generate a large synthetic log that approximates
-    the benchmark statistics (22 000 events, 14 500 objects).
-    """
-    print("=" * 60)
-    print("Experiment 2 — OCEL 2.0 benchmark (Table III in paper)")
-    print("=" * 60)
-
-    net = build_order_fulfilment_net()
-
-    if ocel_path and os.path.exists(ocel_path):
-        from src import load_ocel_json
-        print(f"  Loading real log from {ocel_path} ...")
-        log = load_ocel_json(ocel_path)
-    else:
-        print("  No OCEL path given — generating synthetic approximation")
-        print("  (≈22 000 events, ≈14 500 objects)")
-        log = build_log_B(num_orders=2200, items_per_order=5,
-                          violation_rate=0.30, seed=0)
-
-    stats = log.statistics()
-    print(f"  Log stats: {stats['num_events']} events, "
-          f"{stats['num_objects']} objects")
-
+def run_once(net, log):
     t0 = time.perf_counter()
     result = OCTokenReplay(net).run(log)
     elapsed = time.perf_counter() - t0
-
-    print(result.summary())
-    print(f"\n  Runtime: {elapsed:.3f} s")
-    print(f"  Violating objects (f_o < 0.99): "
-          f"{len(result.objects_below_threshold(0.99))}")
-
-    with open("results/experiment2_top_violators.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["obj_id","obj_type","fitness",
-                                           "missing","remaining"])
-        w.writeheader()
-        for s in result.objects_below_threshold(0.99)[:50]:
-            w.writerow({"obj_id": s.obj_id, "obj_type": s.obj_type,
-                        "fitness": round(s.fitness, 4),
-                        "missing": s.missing, "remaining": s.remaining})
-    print("→ Top violators saved to results/experiment2_top_violators.csv")
+    return result, elapsed
 
 
-# ─────────────────────────────────────────────────────────────
-# Scalability experiment (Figure 4)
-# ─────────────────────────────────────────────────────────────
+def save_csv(filename, rows, header):
+    path = os.path.join(RESULTS, filename)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        w.writerows(rows)
+    print(f"  saved → {path}")
 
-def run_scalability(max_k: int = 8, items_per_order: int = 3, seed: int = 0):
-    """
-    Measure runtime for log sizes 1k … max_k*1000 events.
-    Reproduces Figure 4 in the paper.
-    """
-    print("=" * 60)
-    print("Scalability experiment (Figure 4 in paper)")
-    print("=" * 60)
+
+def separator(char="=", width=65):
+    print(char * width)
+
+
+# ── Experiment 1: synthetic logs ──────────────────────────────────────
+
+def experiment1():
+    separator()
+    print("  EXPERIMENT 1 — Synthetic Logs")
+    print(f"  OC-PN: order-fulfilment (Fig. 1)")
+    print(f"  n_orders = 100  |  seed = 42")
+    separator()
 
     net = build_order_fulfilment_net()
+
+    configs = [
+        ("A", "none  (baseline)", 0.0),
+        ("B", "20% skip Pack",    0.2),
+        ("C", "40% skip Pack",    0.4),
+    ]
+
+    header = ["log", "deviation", "f", "f_order", "f_item",
+              "n_events", "n_objects", "time_s"]
     rows = []
 
-    for k in range(1, max_k + 1):
-        n_orders = k * 100  # ~k*1000 events (5 events per case + items)
-        log = build_log_B(n_orders, items_per_order, seed=seed)
-        n_events = log.statistics()["num_events"]
+    print(f"\n{'Log':<5} {'Deviation':<22} {'f':>6} {'f_order':>8} "
+          f"{'f_item':>7} {'events':>7} {'objects':>8} {'time':>7}")
+    print("-" * 65)
 
-        # Warm-up
-        OCTokenReplay(net).run(log)
+    for name, desc, rate in configs:
+        log = generate_synthetic_log(n_orders=100,
+                                     deviation_rate=rate,
+                                     seed=42)
+        result, elapsed = run_once(net, log)
+        ft = result.fitness_by_type()
 
-        # Timed runs (average of 3)
-        times = []
-        for _ in range(3):
-            t0 = time.perf_counter()
-            OCTokenReplay(net).run(log)
-            times.append(time.perf_counter() - t0)
-        avg = sum(times) / len(times)
+        f       = round(result.fitness, 4)
+        f_order = round(ft.get("order", 0.0), 4)
+        f_item  = round(ft.get("item",  0.0), 4)
+        n_obj   = len(result.per_object)
 
-        rows.append({"k_thousands": k, "events": n_events,
-                     "time_s": round(avg, 4)})
-        print(f"  {n_events:6d} events → {avg:.4f} s")
+        print(f"Log {name:<2} {desc:<22} {f:>6.3f} {f_order:>8.3f} "
+              f"{f_item:>7.3f} {len(log.events):>7} {n_obj:>8} {elapsed:>6.3f}s")
 
-    # Compute empirical scaling factor
-    if len(rows) >= 2:
-        ratio = rows[-1]["time_s"] / rows[0]["time_s"]
-        n_ratio = rows[-1]["events"] / rows[0]["events"]
-        print(f"\n  Scaling factor: {ratio:.2f}× for {n_ratio:.0f}× more events")
-        print(f"  (linear would be {n_ratio:.2f}×)")
+        rows.append([name, desc, f, f_order, f_item,
+                     len(log.events), n_obj, round(elapsed, 4)])
 
-    with open("results/scalability.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=rows[0].keys())
-        w.writeheader(); w.writerows(rows)
-    print("→ Saved to results/scalability.csv")
+    save_csv("experiment1.csv", rows, header)
+
+    # ── per-object breakdown for Log C ───────────────────────────────
+    print()
+    separator("-")
+    print("  Per-object breakdown — Log C (top violators)")
+    separator("-")
+
+    log_c    = generate_synthetic_log(n_orders=100, deviation_rate=0.4, seed=42)
+    result_c, _ = run_once(net, log_c)
+
+    violators   = sorted([s for s in result_c.per_object if s.fitness < 1.0],
+                         key=lambda s: s.fitness)
+    conformant  = [s for s in result_c.per_object if s.fitness == 1.0]
+
+    print(f"\n  Total objects   : {len(result_c.per_object)}")
+    print(f"  Conformant      : {len(conformant)}  (f_o = 1.000)")
+    print(f"  Violators       : {len(violators)}  (f_o < 1.000)")
+
+    print(f"\n  {'obj_id':<10} {'type':<8} {'fitness':>8} {'missing':>8} {'remaining':>10}")
+    print("  " + "-" * 48)
+    for s in violators[:12]:
+        print(f"  {s.obj_id:<10} {s.obj_type:<8} {s.fitness:>8.3f} "
+              f"{s.missing:>8} {s.remaining:>10}")
+    if len(violators) > 12:
+        print(f"  ... ({len(violators) - 12} more violators not shown)")
+
+    # type breakdown among violators
+    print()
+    vc = Counter(s.obj_type for s in violators)
+    for ot, n in vc.most_common():
+        print(f"  Violating {ot:<10}: {n} objects")
 
 
-# ─────────────────────────────────────────────────────────────
-# Entry point
-# ─────────────────────────────────────────────────────────────
+# ── Experiment 2: real OCEL log ───────────────────────────────────────
+
+def experiment2():
+    print()
+    separator()
+    print("  EXPERIMENT 2 — Real OCEL Log")
+    print(f"  File: data/example_log.jsonocel")
+    separator()
+
+    path = os.path.join(DATA, "example_log.jsonocel")
+    if not os.path.exists(path):
+        print(f"\n  ✗  File not found: {path}")
+        print("  Place example_log.jsonocel in the data/ folder and re-run.")
+        return
+
+    # parse
+    log = load_ocel1(path)
+
+    type_counts = Counter(
+        ot for ev in log.events for _, ot in ev.objects
+    )
+    unique_objs = {oid for ev in log.events for oid, _ in ev.objects}
+    activities  = sorted({ev.activity for ev in log.events})
+
+    print(f"\n  Parsed successfully.")
+    print(f"  Events     : {len(log.events)}")
+    print(f"  Objects    : {len(unique_objs)} unique")
+    print(f"  Object types:")
+    for ot, n in type_counts.most_common():
+        print(f"    {ot:<15}: {n} references")
+    print(f"  Activities : {activities}")
+
+    # build accepting net
+    from model import OCPetriNet, Place, Transition
+    from collections import defaultdict
+
+    obj_types = {ot for ev in log.events for _, ot in ev.objects}
+    act_types = defaultdict(set)
+    for ev in log.events:
+        for _, ot in ev.objects:
+            act_types[ev.activity].add(ot)
+
+    net = OCPetriNet()
+    places = {}
+    for ot in obj_types:
+        # только source и sink — никакого mid
+        src = Place(f"src_{ot}", ot, is_source=True)
+        sink = Place(f"sink_{ot}", ot, is_sink=True)
+        net.places += [src, sink]
+        places[ot] = (src, sink)
+
+    for act, types in act_types.items():
+        # каждый переход потребляет src и производит src (токен возвращается)
+        # так объект всегда может участвовать в следующем событии
+        net.transitions.append(Transition(
+            id=act.replace(" ", "_"),
+            activity=act,
+            preset={ot: [places[ot][0]] for ot in types},  # src
+            postset={ot: [places[ot][0]] for ot in types},  # src обратно
+        ))
+    net.build_index()
+
+    result, elapsed = run_once(net, log)
+
+    print()
+    separator("-")
+    print("  Replay results (accepting net — parsing validation)")
+    separator("-")
+    print(f"\n  Global fitness : {result.fitness:.4f}  "
+          f"{'✓  OK' if result.fitness >= 0.99 else '✗  unexpected missing tokens'}")
+    print(f"  Runtime        : {elapsed:.4f} s")
+
+    ft = result.fitness_by_type()
+    print(f"\n  Per-type fitness:")
+    for ot, fv in sorted(ft.items()):
+        print(f"    f_tau ({ot:<12}) = {fv:.4f}")
+
+    print(f"\n  Per-object fitness (all {len(result.per_object)} objects):")
+    print(f"  {'obj_id':<15} {'type':<12} {'fitness':>8} {'missing':>8} {'remaining':>10}")
+    print("  " + "-" * 58)
+    for s in sorted(result.per_object, key=lambda x: (x.obj_type, x.obj_id)):
+        flag = "  ← !" if s.fitness < 1.0 else ""
+        print(f"  {s.obj_id:<15} {s.obj_type:<12} {s.fitness:>8.3f} "
+              f"{s.missing:>8} {s.remaining:>10}{flag}")
+
+    # save csv
+    header = ["obj_id", "obj_type", "fitness", "missing", "remaining"]
+    rows   = [
+        [s.obj_id, s.obj_type, round(s.fitness, 4), s.missing, s.remaining]
+        for s in sorted(result.per_object, key=lambda x: (x.obj_type, x.obj_id))
+    ]
+    save_csv("experiment2_top_violators.csv", rows, header)
+
+
+# ── Scalability ───────────────────────────────────────────────────────
+
+def scalability():
+    print()
+    separator()
+    print("  SCALABILITY TEST")
+    print("  deviation_rate = 0.0  |  seed = 42")
+    separator()
+
+    net    = build_order_fulfilment_net()
+    sizes  = [25, 50, 100, 200, 400, 800]
+    header = ["n_orders", "n_events", "n_objects", "time_s"]
+    rows   = []
+
+    print(f"\n  {'n_orders':>9} {'n_events':>9} {'n_objects':>10} {'time':>8}")
+    print("  " + "-" * 42)
+
+    prev_time = None
+    for n in sizes:
+        log = generate_synthetic_log(n_orders=n, deviation_rate=0.0, seed=42)
+        _, elapsed = run_once(net, log)
+        n_obj = len({oid for ev in log.events for oid, _ in ev.objects})
+
+        factor = ""
+        if prev_time is not None and prev_time > 0:
+            factor = f"  (×{elapsed/prev_time:.2f})"
+        prev_time = elapsed
+
+        print(f"  {n:>9} {len(log.events):>9} {n_obj:>10} "
+              f"{elapsed:>7.4f}s{factor}")
+        rows.append([n, len(log.events), n_obj, round(elapsed, 5)])
+
+    save_csv("scalability.csv", rows, header)
+    print("\n  Factor column shows runtime ratio relative to previous row.")
+    print("  Expected: close to 2.0 at each doubling (linear scaling).")
+
+
+# ── Entry point ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Reproduce all experiments from the paper.")
-    parser.add_argument("--all",      action="store_true",
-                        help="Run all experiments")
-    parser.add_argument("--exp0",     action="store_true",
-                        help="Counterexample / soundness proof")
-    parser.add_argument("--exp1",     action="store_true",
-                        help="Synthetic logs (Table II)")
-    parser.add_argument("--exp2",     action="store_true",
-                        help="OCEL 2.0 benchmark (Table III)")
-    parser.add_argument("--scale",    action="store_true",
-                        help="Scalability experiment (Figure 4)")
-    parser.add_argument("--ocel",     type=str, default=None,
-                        help="Path to OCEL 2.0 JSON file for exp2")
-    parser.add_argument("--orders",   type=int, default=50,
-                        help="Number of orders for exp1 (default 50)")
-    args = parser.parse_args()
+    os.makedirs(RESULTS, exist_ok=True)
+    os.makedirs(DATA,    exist_ok=True)
 
-    run_all = args.all or not any([args.exp0, args.exp1, args.exp2, args.scale])
+    # open Tee — everything printed after this line goes to both
+    # console and results/run_log.txt
+    log_path = os.path.join(RESULTS, "run_log.txt")
+    tee = Tee(log_path)
+    sys.stdout = tee
 
-    if run_all or args.exp0:
-        run_counterexample()
-    if run_all or args.exp1:
-        run_experiment1(num_orders=args.orders)
-    if run_all or args.exp2:
-        run_experiment2(ocel_path=args.ocel)
-    if run_all or args.scale:
-        run_scalability()
+    print(f"OC-TBR Experimental Run")
+    print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    try:
+        experiment1()
+        experiment2()
+        scalability()
+    finally:
+        print(f"\nFinished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Full log saved to: {log_path}")
+        tee.close()

@@ -7,7 +7,7 @@ tracks how many tokens it holds at each place.
 
 from __future__ import annotations
 from collections import defaultdict
-from src.model import Place
+from .model import Place
 
 
 class Marking:

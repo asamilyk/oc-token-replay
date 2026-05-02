@@ -1,4 +1,4 @@
-log,events,objects,f_global,f_order,f_item,binding_recall,time_s
-Log A (perfect),400,200,0.8889,0.9167,0.875,N/A,0.0055
-Log B (mild),388,200,0.8177,0.8672,0.7916,N/A,0.0048
-Log C (severe),400,200,0.8508,0.8067,0.875,250%,0.0052
+log,deviation,f,f_order,f_item,n_events,n_objects,time_s
+A,none  (baseline),0.8609,0.9,0.8333,400,337,0.0042
+B,20% skip Pack,0.7919,0.8487,0.7498,380,337,0.0039
+C,40% skip Pack,0.6849,0.7923,0.5964,360,337,0.002

@@ -19,7 +19,7 @@ Steps:
 Time complexity: O(|L| * |O| * |P|)
 
 References:
-  Samilyk A.Yu. (2025). Checking the Conformance of Object-Centric
+  Samilyk A. (2026). Checking the Conformance of Object-Centric
   Petri Nets and Event Logs using a Token Replay Approach. HSE.
 """
 
@@ -27,9 +27,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import defaultdict
 
-from src.model   import OCPetriNet, Transition, Place
-from src.log     import OCELLog
-from src.marking import Marking
+from .model   import OCPetriNet, Transition, Place
+from .log     import OCELLog
+from .marking import Marking
 
 
 # =============================================================

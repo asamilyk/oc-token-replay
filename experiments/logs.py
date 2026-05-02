@@ -1,195 +1,100 @@
 """
-experiments/logs.py — Synthetic log generators for Experiments 1 and 2.
-
-Three log types as described in Section VI of the paper:
-  - Log A (perfect):  all objects follow the conformant trace
-  - Log B (mild):     20% of orders skip Pack before Pay
-  - Log C (severe):   40% of cases contain cross-object binding violation
-
-Reproduces the exact setup used in Table II of the paper.
+Log generators and OCEL parsers used in experiments.
 """
+import json
+import random
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-import sys, os, random
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from src.log import OCELLog, OCEvent
-
-
-# ── helpers ──────────────────────────────────────────────────
-
-def _ev(eid, act, ts, *obj_pairs):
-    """Shorthand for building an OCEvent."""
-    return OCEvent(id=eid, activity=act, timestamp=float(ts),
-                   objects=list(obj_pairs))
+from log import OCELLog, OCEvent
 
 
-# ── Log A: perfect conformance ────────────────────────────────
-
-def build_log_A(num_orders: int = 50, items_per_order: int = 2,
-                seed: int = 42) -> OCELLog:
+def generate_synthetic_log(n_orders: int,
+                            deviation_rate: float,
+                            seed: int = 42) -> OCELLog:
     """
-    Perfectly conformant log.
-    Every order follows: Place -> Pack -> Pay -> Ship -> Close
-    Every item follows:  Pack -> Ship -> Deliver
+    Generate a synthetic order-fulfilment OCEL log.
+
+    Parameters
+    ----------
+    n_orders : int
+        Number of orders to generate.
+    deviation_rate : float
+        Fraction of orders that skip Pack Items.
+        0.0 = Log A (perfect), 0.2 = Log B (mild), 0.4 = Log C (severe).
+    seed : int
+        Random seed for reproducibility.
     """
-    rng = random.Random(seed)
+    random.seed(seed)
     events = []
     ts = 1.0
+    eid = 1
+    item_counter = 1
 
-    for k in range(num_orders):
+    # assign items to orders up front (1–4 items per order, avg 2.5)
+    order_items = {}
+    for k in range(1, n_orders + 1):
         oid = f"o{k}"
-        iids = [f"i{k}_{j}" for j in range(items_per_order)]
+        n_items = random.randint(1, 4)
+        iids = [f"i{item_counter + j}" for j in range(n_items)]
+        item_counter += n_items
+        order_items[oid] = iids
 
-        events.append(_ev(f"e_pl_{k}", "Place Order", ts,
-                          (oid, "order")))
-        ts += 1
-        item_pairs = [(i, "item") for i in iids]
-        events.append(_ev(f"e_pk_{k}", "Pack Items", ts,
-                          (oid, "order"), *item_pairs))
-        ts += 1
-        events.append(_ev(f"e_pa_{k}", "Pay", ts,
-                          (oid, "order")))
-        ts += 1
-        events.append(_ev(f"e_sh_{k}", "Ship Order", ts,
-                          (oid, "order"), *item_pairs))
-        ts += 1
-        events.append(_ev(f"e_cl_{k}", "Close Order", ts,
-                          (oid, "order")))
-        ts += 1
-        for iid in iids:
-            events.append(_ev(f"e_dl_{k}_{iid}", "Deliver Item", ts,
-                               (iid, "item")))
-            ts += 1
+    order_ids = list(order_items.keys())
+
+    # choose deviating orders deterministically
+    n_deviant = int(n_orders * deviation_rate)
+    deviant_set = set(random.sample(order_ids, n_deviant))
+
+    def add(activity, objs):
+        nonlocal ts, eid
+        events.append(OCEvent(f"e{eid}", activity, ts, objs))
+        ts += 1.0
+        eid += 1
+
+    for oid in order_ids:
+        add("Place Order", [(oid, "order")])
+
+    for oid in order_ids:
+        if oid not in deviant_set:
+            objs = [(oid, "order")] + [(i, "item") for i in order_items[oid]]
+            add("Pack Items", objs)
+
+    for oid in order_ids:
+        add("Pay", [(oid, "order")])
+
+    for oid in order_ids:
+        objs = [(oid, "order")] + [(i, "item") for i in order_items[oid]]
+        add("Ship Order", objs)
 
     return OCELLog(events=events)
 
 
-# ── Log B: mild — 20% of orders skip Pack ─────────────────────
+def load_ocel1(path: str) -> OCELLog:
+    """
+    Parse an OCEL 1.0 JSON file into OCELLog.
 
-def build_log_B(num_orders: int = 50, items_per_order: int = 2,
-                violation_rate: float = 0.2, seed: int = 42) -> OCELLog:
+    In OCEL 1.0 the ocel:omap field contains plain object IDs.
+    Object types are resolved from the ocel:objects dictionary.
     """
-    Mild non-conformance: `violation_rate` fraction of orders skip Pack.
-    This introduces one missing token per such order at t_pay.
-    """
-    rng = random.Random(seed)
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    raw_objects = data["ocel:objects"]
     events = []
-    ts = 1.0
 
-    for k in range(num_orders):
-        oid  = f"o{k}"
-        iids = [f"i{k}_{j}" for j in range(items_per_order)]
-        skip_pack = rng.random() < violation_rate
+    for eid, ev in data["ocel:events"].items():
+        obj_list = [
+            (oid, raw_objects[oid]["ocel:type"])
+            for oid in ev["ocel:omap"]
+            if oid in raw_objects
+        ]
+        events.append(OCEvent(
+            id        = eid,
+            activity  = ev["ocel:activity"],
+            timestamp = ev["ocel:timestamp"],
+            objects   = obj_list,
+        ))
 
-        events.append(_ev(f"e_pl_{k}", "Place Order", ts,
-                          (oid, "order")))
-        ts += 1
-
-        if not skip_pack:
-            item_pairs = [(i, "item") for i in iids]
-            events.append(_ev(f"e_pk_{k}", "Pack Items", ts,
-                              (oid, "order"), *item_pairs))
-            ts += 1
-        else:
-            # Items are still "added" to the log but Pack is skipped for order
-            item_pairs = [(i, "item") for i in iids]
-
-        events.append(_ev(f"e_pa_{k}", "Pay", ts,
-                          (oid, "order")))
-        ts += 1
-        events.append(_ev(f"e_sh_{k}", "Ship Order", ts,
-                          (oid, "order"), *item_pairs))
-        ts += 1
-        events.append(_ev(f"e_cl_{k}", "Close Order", ts,
-                          (oid, "order")))
-        ts += 1
-        for iid in iids:
-            events.append(_ev(f"e_dl_{k}_{iid}", "Deliver Item", ts,
-                               (iid, "item")))
-            ts += 1
-
+    events.sort(key=lambda e: e.timestamp)
     return OCELLog(events=events)
-
-
-# ── Log C: severe — cross-object binding violation ────────────
-
-def build_log_C(num_orders: int = 50, items_per_order: int = 2,
-                violation_rate: float = 0.4, seed: int = 42) -> OCELLog:
-    """
-    Severe non-conformance: in `violation_rate` fraction of *pairs* of
-    consecutive orders, the items packed for order k are shipped under
-    order k+1 (cross-object binding violation, Table I in the paper).
-
-    This is exactly the counterexample from Section IV, scaled up.
-    """
-    rng  = random.Random(seed)
-    events = []
-    ts   = 1.0
-
-    # Build order/item data first
-    orders = []
-    for k in range(num_orders):
-        oid  = f"o{k}"
-        iids = [f"i{k}_{j}" for j in range(items_per_order)]
-        orders.append((oid, iids))
-
-    # Decide which consecutive pairs will be swapped
-    swapped = set()
-    k = 0
-    while k < num_orders - 1:
-        if rng.random() < violation_rate:
-            swapped.add(k)
-            k += 2   # skip next to avoid overlap
-        else:
-            k += 1
-
-    for k, (oid, iids) in enumerate(orders):
-        events.append(_ev(f"e_pl_{k}", "Place Order", ts, (oid, "order")))
-        ts += 1
-
-        pack_item_pairs = [(i, "item") for i in iids]
-        events.append(_ev(f"e_pk_{k}", "Pack Items", ts,
-                          (oid, "order"), *pack_item_pairs))
-        ts += 1
-
-        events.append(_ev(f"e_pa_{k}", "Pay", ts, (oid, "order")))
-        ts += 1
-
-    # Ship phase: swapped pairs ship under the wrong order
-    for k, (oid, iids) in enumerate(orders):
-        if k in swapped:
-            # Items of order k are shipped under order k+1
-            ship_oid       = orders[k + 1][0]
-            ship_item_pairs = [(i, "item") for i in iids]
-        else:
-            ship_oid       = oid
-            ship_item_pairs = [(i, "item") for i in iids]
-
-        events.append(_ev(f"e_sh_{k}", "Ship Order", ts,
-                          (ship_oid, "order"), *ship_item_pairs))
-        ts += 1
-        events.append(_ev(f"e_cl_{k}", "Close Order", ts, (oid, "order")))
-        ts += 1
-        for iid in iids:
-            events.append(_ev(f"e_dl_{k}_{iid}", "Deliver Item", ts,
-                               (iid, "item")))
-            ts += 1
-
-    return OCELLog(events=events)
-
-
-# ── Counterexample log (Section IV) ──────────────────────────
-
-def build_counterexample_log() -> OCELLog:
-    """
-    The exact four-event counterexample from Table I of the paper.
-    Used in unit tests and Section IV illustration.
-    """
-    return OCELLog(events=[
-        _ev("e1", "Place Order", 1.0, ("o1", "order")),
-        _ev("e2", "Place Order", 2.0, ("o2", "order")),
-        _ev("e3", "Pack Items",  3.0, ("o1", "order"),
-            ("i1", "item"), ("i2", "item")),
-        _ev("e4", "Ship Order",  4.0, ("o2", "order"),
-            ("i1", "item"), ("i2", "item")),
-    ])

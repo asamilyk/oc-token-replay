@@ -7,10 +7,10 @@ Public API:
     from src import OCTokenReplay, ReplayResult
 """
 
-from src.model   import Place, Transition, OCPetriNet
-from src.log     import OCEvent, OCELLog, load_ocel_json, load_ocel_csv, make_synthetic_log
-from src.marking import Marking
-from src.replay  import OCTokenReplay, ReplayResult, ObjectStats
+from .model   import Place, Transition, OCPetriNet
+from .log     import OCEvent, OCELLog, load_ocel_json, load_ocel_csv, make_synthetic_log
+from .marking import Marking
+from .replay  import OCTokenReplay, ReplayResult, ObjectStats
 
 __all__ = [
     "Place", "Transition", "OCPetriNet",
