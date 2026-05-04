@@ -230,7 +230,13 @@ class OCTokenReplay:
 
         # ── Step 4: Remaining tokens ──────────────────────────
         for obj_id, marking in markings.items():
-            stats_map[obj_id].remaining = marking.total()
+            for obj_id, marking in markings.items():
+                remaining = sum(
+                    count
+                    for place, count in marking.tokens.items()
+                    if not place.is_sink
+                )
+                stats_map[obj_id].remaining = remaining
 
         # ── Accumulate global counters ────────────────────────
         result = ReplayResult(per_object=list(stats_map.values()))
