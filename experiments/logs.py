@@ -4,14 +4,15 @@ Log generators and OCEL parsers used in experiments.
 import json
 import random
 import sys, os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from log import OCELLog, OCEvent
 
 
 def generate_synthetic_log(n_orders: int,
-                            deviation_rate: float,
-                            seed: int = 42) -> OCELLog:
+                           deviation_rate: float,
+                           seed: int = 42) -> OCELLog:
     """
     Generate a synthetic order-fulfilment OCEL log.
 
@@ -90,10 +91,10 @@ def load_ocel1(path: str) -> OCELLog:
             if oid in raw_objects
         ]
         events.append(OCEvent(
-            id        = eid,
-            activity  = ev["ocel:activity"],
-            timestamp = ev["ocel:timestamp"],
-            objects   = obj_list,
+            id=eid,
+            activity=ev["ocel:activity"],
+            timestamp=ev["ocel:timestamp"],
+            objects=obj_list,
         ))
 
     events.sort(key=lambda e: e.timestamp)

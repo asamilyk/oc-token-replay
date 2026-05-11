@@ -2,10 +2,12 @@
 
 Implementation and experiments for the paper:
 
-> **Checking the Conformance of Object-Centric Petri Nets and Event Logs
+> **Conformance Checking of Object-Centric Petri Nets and Event Logs
 > using a Token Replay Approach**
-
+>
 > Anastasia Samilyk, HSE University, 2026.
+
+---
 
 ## Description
 
@@ -15,13 +17,15 @@ a Petri net model. This project extends that technique to
 (OCEL)**, where a single event can involve multiple objects of different
 types simultaneously.
 
-The algorithm (OC-TBR) produces **three fitness metrics**:
+The algorithm **OC-TBR** produces three fitness metrics:
 
 | Metric | Scope | Use |
 |--------|-------|-----|
 | `f` (global) | Whole log | Overall conformance |
 | `f_o` (per-object) | Single object | Root-cause: *which* object violates? |
 | `f_τ` (per-type) | Object type | *Which category* of objects deviates most? |
+
+---
 
 ## Quick start
 
@@ -30,104 +34,148 @@ git clone https://github.com/apsamilyk/oc-token-replay
 cd oc-token-replay
 pip install -r requirements.txt
 
-# Run all experiments (reproduces Tables II–III and Figure 4 in the paper)
-python experiments/run_experiments.py --all
+# download real-world OCEL logs (once)
+python scripts/download_data.py
 
-# Run only the counterexample (Section IV, Proposition 1)
-python experiments/run_experiments.py --exp0
-
-# Use your own OCEL 2.0 JSON log
-python experiments/run_experiments.py --exp2 --ocel path/to/log.json
+# run on any OCEL log with auto-discovered OC-PN
+python run_conformance.py data/example_log.jsonocel
+python run_conformance.py data/p2p_normal.jsonocel --threshold 0.9
+python run_conformance.py data/your_log.jsonocel --show-net
 ```
+
+---
+
+## Reproducing paper results
+
+```bash
+# Experiments 1 + 2 — synthetic logs + parsing validation
+python -m experiments.run_experiments
+
+# Experiments 3 + 4 — three real OCEL logs + auto vs manual OC-PN
+python -m experiments.run_real_logs
+
+# Experiment 5 — comparison with OC Alignments [Liss et al., 2023]
+# requires Python 3.9 venv — see alignment_baseline/README.md
+python -m experiments.run_comparison
+
+# generate all figures (PDF + PNG)
+python -m experiments.plot_results
+```
+
+| Paper item | Script | Output |
+|------------|--------|--------|
+| Table II — synthetic logs | `run_experiments` | `results/experiment1.csv` |
+| Table III — parsing validation | `run_experiments` | `results/experiment2_top_violators.csv` |
+| Table IV — three real logs | `run_real_logs` | `results/experiment3_real_logs.csv` |
+| Table V — auto vs manual OC-PN | `run_real_logs` | `results/running_example_auto_vs_manual.csv` |
+| Table VI — alignment comparison | `run_comparison` | `results/comparison_oc_alignments.csv` |
+| Fig. 1 — fitness vs deviation | `plot_results` | `figures/fitness_vs_deviation.pdf` |
+| Fig. 2 — auto vs manual | `plot_results` | `figures/auto_vs_manual.pdf` |
+| Fig. 3 — fitness comparison | `plot_results` | `figures/comparison_alignments.pdf` |
+| Fig. 4 — runtime comparison | `plot_results` | `figures/runtime_comparison.pdf` |
+| Fig. 5 — scalability | `plot_results` | `figures/scalability.pdf` |
+
+---
 
 ## Repository structure
 
 ```
 oc-token-replay/
-├── src/
-│   ├── __init__.py      # Public API
-│   ├── model.py         # OC-PN data structures (Place, Transition, OCPetriNet)
-│   ├── log.py           # OCEL structures + JSON/CSV importers
-│   ├── marking.py       # Per-object token bag
-│   └── replay.py        # OC-TBR algorithm (Algorithm 1 in paper)
 │
-├── experiments/
-│   ├── nets.py          # Reference OC-PNs (Figure 1 in paper)
-│   ├── logs.py          # Synthetic log generators (Logs A, B, C)
-│   └── run_experiments.py  # Reproduces all tables and figures
+├── src/                        # OC-TBR algorithm — core library
+│   ├── __init__.py
+│   ├── model.py                # Place, Transition, OCPetriNet
+│   ├── log.py                  # OCELLog, OCEvent + OCEL 1.0 parser
+│   ├── marking.py              # per-object token bag
+│   └── replay.py               # OC-TBR algorithm (Algorithm 1)
+│
+├── experiments/                # experiment scripts
+│   ├── nets.py                 # OC-PN definitions (manual + discovered)
+│   ├── logs.py                 # synthetic log generator
+│   ├── run_experiments.py      # Experiments 1 + 2
+│   ├── run_real_logs.py        # Experiments 3 + 4
+│   ├── run_comparison.py       # Experiment 5 — vs OC alignments
+│   └── plot_results.py         # all five figures
+│
+├── alignment_baseline/         # OC alignments [Liss et al., 2023]
+│   ├── oc_align_worker.py      # worker (Python 3.9 + pm4py 2.2)
+│   └── README.md               # setup instructions
+│
+├── scripts/
+│   └── download_data.py        # downloads OCEL logs before experiments
+│
+├── data/                       # OCEL log files
+│   ├── README.md               # data sources and download links
+│   └── example_log.jsonocel    # included — order management, 23 events
+│
+├── results/                    # auto-generated CSV results (git-ignored)
+├── figures/                    # auto-generated PDF/PNG figures (git-ignored)
 │
 ├── tests/
-│   └── test_replay.py   # 17 unit tests covering all paper claims
+│   └── test_replay.py          # 17 unit tests
 │
-├── data/                # Place your OCEL 2.0 JSON files here
-│   └── README.md
-│
-├── results/             # Auto-generated CSV results (created on run)
-│
+├── run_conformance.py          # universal runner for any OCEL log
 ├── requirements.txt
 └── README.md
 ```
 
-## Algorithm (paper Section V)
+---
+
+## Algorithm (paper Section IV)
 
 ```
 Input:  OC-PN N, OCEL log L
-Output: counters P_g, C_g, M_g, R_g; per-object stats
+Output: global counters P_g, C_g, M_g, R_g; per-object stats
 
-Step 1 — Object layout:   group objects by type
-Step 2 — Init markings:   place 1 token at source place for each object
+Step 1 — Object layout:   group objects by type (byType[τ])
+Step 2 — Init markings:   place 1 token at source place per object
 Step 3 — Replay loop:     for each event e = (activity, binding):
-  Step 3a — find transition t matching activity
-  Step 3b — for each object o bound to e:
-             consume from preset(t, type(o))   → if missing: m_o++
-             produce into postset(t, type(o))
-Step 4 — Remaining:       count leftover tokens per object
+  3a — find transition t matching activity label
+  3b — for each object o bound to e:
+       consume from preset(t, type(o))  → if missing: m_o++
+       produce into postset(t, type(o))
+Step 4 — Remaining:       count leftover tokens in non-sink places
+         (sink-place tokens excluded — they indicate normal completion)
 
-Fitness formulae (backward-compatible with classical replay):
-  f     = 1 - ½·(M_g/C_g + R_g/P_g)          [global,   Eq. 1]
-  f_o   = 1 - ½·(m_o/c_o + r_o/p_o)           [per-obj,  Eq. 2]
-  f_τ   = 1 - ½·(Σm_o/Σc_o + Σr_o/Σp_o)      [per-type, Eq. 3]
+Fitness formulae — generalisations of Rozinat & van der Aalst (2008):
+  f     = 1 − ½·(M_g/C_g + R_g/P_g)        [global,     Eq. 1]
+  f_o   = 1 − ½·(m_o/c_o + r_o/p_o)         [per-object, Eq. 2]
+  f_τ   = 1 − ½·(Σm_o/Σc_o + Σr_o/Σp_o)    [per-type,   Eq. 3]
 
 Time complexity: O(|L| · |O| · |P|)  — polynomial
 ```
 
+---
+
 ## Usage as a library
 
 ```python
-from src import OCPetriNet, Place, Transition
-from src import make_synthetic_log, OCTokenReplay
+from src import OCTokenReplay, OCELLog, OCEvent
+from src.model import OCPetriNet, Place, Transition
 
-# Build a minimal OC-PN
+# build a minimal OC-PN
 net = OCPetriNet()
 src = Place("src", "order", is_source=True)
 end = Place("end", "order", is_sink=True)
-t   = Transition("t1", "Process", preset={"order": [src]},
-                                   postset={"order": [end]})
+t   = Transition("t1", "Process",
+                 preset ={"order": [src]},
+                 postset={"order": [end]})
 net.places      = [src, end]
 net.transitions = [t]
+net.build_index()
 
-# Build a log
-log = make_synthetic_log([
-    {"id": "e1", "activity": "Process", "timestamp": 1,
-     "objects": [["o1", "order"]]},
+# build a log
+log = OCELLog(events=[
+    OCEvent("e1", "Process", 1.0, [("o1", "order")]),
 ])
 
-# Run replay
+# run replay
 result = OCTokenReplay(net).run(log)
 print(result.summary())
 print(result.per_object_table())
 ```
 
-## Reproducing paper results
-
-| Paper item | Command |
-|------------|---------|
-| Section IV counterexample | `--exp0` |
-| Table II (synthetic logs) | `--exp1` |
-| Table III (OCEL 2.0)      | `--exp2 [--ocel path]` |
-| Figure 4 (scalability)    | `--scale` |
-
-Results are saved as CSV files in `results/`.
+---
 
 ## Running tests
 
@@ -135,35 +183,58 @@ Results are saved as CSV files in `results/`.
 pytest tests/ -v
 ```
 
-All 17 tests cover:
-- Proposition 1 (soundness of per-object projection failure)
-- Perfect conformance → no missing tokens
+Tests cover:
+- Proposition 1 — unsoundness of per-object projection (Section IV)
+- Perfect conformance → f = 1.0, no missing tokens
 - Known violations → correct per-object flagging
-- Fitness formula correctness (all three equations)
-- Edge cases (empty log, unknown activities)
+- All three fitness formulae (Eq. 1–3)
+- Edge cases: empty log, unknown activities
 
-## OCEL 2.0 data
+---
 
-The paper uses the **order management** log from the
-[OCEL 2.0 benchmark](https://ocel-standard.org/).
-Download `order-management.jsonocel` and pass it via `--ocel`.
+## Data
+
+`data/example_log.jsonocel` is included in the repository.
+All other logs are downloaded automatically:
+
+```bash
+python scripts/download_data.py
+```
+
+See `data/README.md` for sources and download links.
+
+---
+
+## Alignment baseline setup
+
+The comparison with OC Alignments [Liss et al., 2023] requires a
+separate Python 3.9 environment.
+See `alignment_baseline/README.md` for step-by-step setup.
+
+---
 
 ## Requirements
 
-- Python 3.10+
-- No mandatory dependencies for the core library
-- `pytest` for tests
-- `pm4py` (optional) for OCEL discovery and alignment baseline
+- Python 3.10+ — core library and experiments
+- `pm4py` — OC-PN discovery and OCEL loading (Experiments 3–4)
+- `matplotlib`, `pandas`, `numpy` — figures
+- `pytest` — tests
+- Python 3.9 + `pm4py==2.2.19.1` — alignment baseline only
+
+```bash
+pip install -r requirements.txt
+```
+
+---
 
 ## Citation
 
 ```bibtex
 @article{samilyk2026octbr,
   author  = {Samilyk, Anastasia},
-  title   = {Checking the Conformance of Object-Centric Petri Nets
+  title   = {Conformance Checking of Object-Centric Petri Nets
              and Event Logs using a Token Replay Approach},
   journal = {HSE University, Faculty of Computer Science},
   year    = {2026},
-  note    = {IEEE Computer Society Journal format}
 }
 ```

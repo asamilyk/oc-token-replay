@@ -1,5 +1,5 @@
 OC-TBR Experimental Run
-Started: 2026-05-02 15:25:48
+Started: 2026-05-11 11:43:31
 =================================================================
   EXPERIMENT 1 — Synthetic Logs
   OC-PN: order-fulfilment (Fig. 1)
@@ -8,9 +8,9 @@ Started: 2026-05-02 15:25:48
 
 Log   Deviation                   f  f_order  f_item  events  objects    time
 -----------------------------------------------------------------
-Log A  none  (baseline)        0.861    0.900   0.833     400      337  0.004s
-Log B  20% skip Pack           0.792    0.849   0.750     380      337  0.004s
-Log C  40% skip Pack           0.685    0.792   0.596     360      337  0.002s
+Log A  none  (baseline)        1.000    1.000   1.000     400      337  0.081s
+Log B  20% skip Pack           0.938    0.953   0.926     380      337  0.075s
+Log C  40% skip Pack           0.842    0.901   0.790     360      337  0.131s
   saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\experiment1.csv
 
 -----------------------------------------------------------------
@@ -18,27 +18,22 @@ Log C  40% skip Pack           0.685    0.792   0.596     360      337  0.002s
 -----------------------------------------------------------------
 
   Total objects   : 337
-  Conformant      : 0  (f_o = 1.000)
-  Violators       : 337  (f_o < 1.000)
+  Conformant      : 199  (f_o = 1.000)
+  Violators       : 138  (f_o < 1.000)
+  obj_id     type      fitness   prod   cons   miss    rem
+  ----------------------------------------------------------
+  i84        item        0.250      2      1      1      1
+  i222       item        0.250      2      1      1      1
+  i217       item        0.250      2      1      1      1
+  i218       item        0.250      2      1      1      1
+  i74        item        0.250      2      1      1      1
+  i5         item        0.250      2      1      1      1
+  i126       item        0.250      2      1      1      1
+  i219       item        0.250      2      1      1      1
+  ... (126 more violators not shown)
 
-  obj_id     type      fitness  missing  remaining
-  ------------------------------------------------
-  i189       item        0.000        1          2
-  i179       item        0.000        1          2
-  i154       item        0.000        1          2
-  i4         item        0.000        1          2
-  i91        item        0.000        1          2
-  i160       item        0.000        1          2
-  i23        item        0.000        1          2
-  i82        item        0.000        1          2
-  i231       item        0.000        1          2
-  i71        item        0.000        1          2
-  i210       item        0.000        1          2
-  i46        item        0.000        1          2
-  ... (325 more violators not shown)
-
-  Violating item      : 237 objects
-  Violating order     : 100 objects
+  Violating item      : 98 objects
+  Violating order     : 40 objects
 
 =================================================================
   EXPERIMENT 2 — Real OCEL Log
@@ -58,33 +53,63 @@ Log C  40% skip Pack           0.685    0.792   0.596     360      337  0.002s
   Replay results (accepting net — parsing validation)
 -----------------------------------------------------------------
 
-  Global fitness : 0.8611  ✗  unexpected missing tokens
-  Runtime        : 0.0002 s
+  Global fitness : 1.0000  ✓  OK
+  Runtime        : 0.0004 s
 
   Per-type fitness:
-    f_tau (delivery    ) = 0.8636
-    f_tau (element     ) = 0.8393
-    f_tau (order       ) = 0.9000
+    f_tau (delivery    ) = 1.0000
+    f_tau (element     ) = 1.0000
+    f_tau (order       ) = 1.0000
 
   Per-object fitness (all 15 objects):
-  obj_id          type          fitness  missing  remaining
-  ----------------------------------------------------------
-  d1              delivery        0.900        0          1  ← !
-  d2              delivery        0.833        0          1  ← !
-  d3              delivery        0.833        0          1  ← !
-  i1              element         0.833        0          1  ← !
-  i2              element         0.833        0          1  ← !
-  i3              element         0.900        0          1  ← !
-  i4              element         0.833        0          1  ← !
-  i5              element         0.833        0          1  ← !
-  i6              element         0.750        0          1  ← !
-  i7              element         0.833        0          1  ← !
-  i8              element         0.833        0          1  ← !
-  i9              element         0.833        0          1  ← !
-  o1              order           0.900        0          1  ← !
-  o2              order           0.833        0          1  ← !
-  o3              order           0.929        0          1  ← !
+  obj_id          type          fitness   prod   cons   miss    rem
+  --------------------------------------------------------------------
+  d1              delivery        1.000      5      4      0      0
+  d2              delivery        1.000      3      2      0      0
+  d3              delivery        1.000      3      2      0      0
+  i1              element         1.000      3      2      0      0
+  i2              element         1.000      3      2      0      0
+  i3              element         1.000      5      4      0      0
+  i4              element         1.000      3      2      0      0
+  i5              element         1.000      3      2      0      0
+  i6              element         1.000      2      1      0      0
+  i7              element         1.000      3      2      0      0
+  i8              element         1.000      3      2      0      0
+  i9              element         1.000      3      2      0      0
+  o1              order           1.000      5      4      0      0
+  o2              order           1.000      3      2      0      0
+  o3              order           1.000      7      6      0      0
   saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\experiment2_top_violators.csv
+
+=== Experiment 2: Real OCEL Log (real OC-PN) ===
+
+  Global fitness : 0.9466
+  Runtime        : 0.0004 s
+
+  Per-type fitness:
+    f_tau (delivery    ) = 1.0000
+    f_tau (element     ) = 0.9821
+    f_tau (order       ) = 0.8500
+
+  Per-object fitness:
+  obj_id          type          fitness   prod   cons   miss    rem
+  --------------------------------------------------------------------
+  d1              delivery        1.000      5      4      0      0
+  d2              delivery        1.000      3      2      0      0
+  d3              delivery        1.000      3      2      0      0
+  i1              element         1.000      3      2      0      0
+  i2              element         1.000      3      2      0      0
+  i3              element         1.000      5      4      0      0
+  i4              element         1.000      3      2      0      0
+  i5              element         1.000      3      2      0      0
+  i6              element         0.750      2      1      0      1  ← !
+  i7              element         1.000      3      2      0      0
+  i8              element         1.000      3      2      0      0
+  i9              element         1.000      3      2      0      0
+  o1              order           1.000      5      4      0      0
+  o2              order           1.000      3      2      0      0
+  o3              order           0.690      7      6      2      2  ← !
+  saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\experiment2_real_net.csv
 
 =================================================================
   SCALABILITY TEST
@@ -93,16 +118,16 @@ Log C  40% skip Pack           0.685    0.792   0.596     360      337  0.002s
 
    n_orders  n_events  n_objects     time
   ------------------------------------------
-         25       100         78  0.0011s
-         50       200        156  0.0021s  (×1.93)
-        100       400        337  0.0034s  (×1.58)
-        200       800        675  0.0090s  (×2.66)
-        400      1600       1367  0.0167s  (×1.85)
-        800      3200       2810  0.0349s  (×2.10)
+         25       100         78  0.0096s
+         50       200        156  0.0185s  (×1.92)
+        100       400        337  0.0971s  (×5.24)
+        200       800        675  0.2838s  (×2.92)
+        400      1600       1367  1.1445s  (×4.03)
+        800      3200       2810  4.9019s  (×4.28)
   saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\scalability.csv
 
   Factor column shows runtime ratio relative to previous row.
   Expected: close to 2.0 at each doubling (linear scaling).
 
-Finished: 2026-05-02 15:25:48
+Finished: 2026-05-11 11:43:38
 Full log saved to: C:\Users\Настя\Documents\GitHub\oc-token-replay\results\run_log.txt

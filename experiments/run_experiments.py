@@ -18,25 +18,23 @@ from collections import Counter
 from datetime import datetime
 
 # ── paths ─────────────────────────────────────────────────────────────
-ROOT    = os.path.dirname(os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(__file__))
 RESULTS = os.path.join(ROOT, "results")
-DATA    = os.path.join(ROOT, "data")
+DATA = os.path.join(ROOT, "data")
 
-sys.path.insert(0, os.path.join(ROOT, "src"))
-sys.path.insert(0, os.path.join(ROOT, "experiments"))
-
-from replay import OCTokenReplay
-from logs   import generate_synthetic_log, load_ocel1
-from nets   import build_order_fulfilment_net
+from src.replay import OCTokenReplay
+from experiments.logs import generate_synthetic_log, load_ocel1
+from experiments.nets import build_order_fulfilment_net
 
 
 # ── Tee: write to console AND file simultaneously ─────────────────────
 
 class Tee:
     """Duplicates stdout to both the console and a log file."""
+
     def __init__(self, filepath):
         self.console = sys.stdout
-        self.file    = open(filepath, "w", encoding="utf-8")
+        self.file = open(filepath, "w", encoding="utf-8")
 
     def write(self, msg):
         self.console.write(msg)
@@ -47,7 +45,7 @@ class Tee:
         self.file.flush()
 
     def close(self):
-        sys.stdout = self.console   # restore original stdout
+        sys.stdout = self.console  # restore original stdout
         self.file.close()
 
 
@@ -86,8 +84,8 @@ def experiment1():
 
     configs = [
         ("A", "none  (baseline)", 0.0),
-        ("B", "20% skip Pack",    0.2),
-        ("C", "40% skip Pack",    0.4),
+        ("B", "20% skip Pack", 0.2),
+        ("C", "40% skip Pack", 0.4),
     ]
 
     header = ["log", "deviation", "f", "f_order", "f_item",
@@ -105,10 +103,10 @@ def experiment1():
         result, elapsed = run_once(net, log)
         ft = result.fitness_by_type()
 
-        f       = round(result.fitness, 4)
+        f = round(result.fitness, 4)
         f_order = round(ft.get("order", 0.0), 4)
-        f_item  = round(ft.get("item",  0.0), 4)
-        n_obj   = len(result.per_object)
+        f_item = round(ft.get("item", 0.0), 4)
+        n_obj = len(result.per_object)
 
         print(f"Log {name:<2} {desc:<22} {f:>6.3f} {f_order:>8.3f} "
               f"{f_item:>7.3f} {len(log.events):>7} {n_obj:>8} {elapsed:>6.3f}s")
@@ -124,22 +122,22 @@ def experiment1():
     print("  Per-object breakdown — Log C (top violators)")
     separator("-")
 
-    log_c    = generate_synthetic_log(n_orders=100, deviation_rate=0.4, seed=42)
+    log_c = generate_synthetic_log(n_orders=100, deviation_rate=0.4, seed=42)
     result_c, _ = run_once(net, log_c)
 
-    violators   = sorted([s for s in result_c.per_object if s.fitness < 1.0],
-                         key=lambda s: s.fitness)
-    conformant  = [s for s in result_c.per_object if s.fitness == 1.0]
+    violators = sorted([s for s in result_c.per_object if s.fitness < 1.0],
+                       key=lambda s: s.fitness)
+    conformant = [s for s in result_c.per_object if s.fitness == 1.0]
 
     print(f"\n  Total objects   : {len(result_c.per_object)}")
     print(f"  Conformant      : {len(conformant)}  (f_o = 1.000)")
     print(f"  Violators       : {len(violators)}  (f_o < 1.000)")
 
-    print(f"\n  {'obj_id':<10} {'type':<8} {'fitness':>8} {'missing':>8} {'remaining':>10}")
-    print("  " + "-" * 48)
-    for s in violators[:12]:
+    print(f"  {'obj_id':<10} {'type':<8} {'fitness':>8} {'prod':>6} {'cons':>6} {'miss':>6} {'rem':>6}")
+    print("  " + "-" * 58)
+    for s in violators[:8]:
         print(f"  {s.obj_id:<10} {s.obj_type:<8} {s.fitness:>8.3f} "
-              f"{s.missing:>8} {s.remaining:>10}")
+              f"{s.produced:>6} {s.consumed:>6} {s.missing:>6} {s.remaining:>6}")
     if len(violators) > 12:
         print(f"  ... ({len(violators) - 12} more violators not shown)")
 
@@ -172,7 +170,7 @@ def experiment2():
         ot for ev in log.events for _, ot in ev.objects
     )
     unique_objs = {oid for ev in log.events for oid, _ in ev.objects}
-    activities  = sorted({ev.activity for ev in log.events})
+    activities = sorted({ev.activity for ev in log.events})
 
     print(f"\n  Parsed successfully.")
     print(f"  Events     : {len(log.events)}")
@@ -195,20 +193,17 @@ def experiment2():
     net = OCPetriNet()
     places = {}
     for ot in obj_types:
-        # только source и sink — никакого mid
-        src = Place(f"src_{ot}", ot, is_source=True)
-        sink = Place(f"sink_{ot}", ot, is_sink=True)
-        net.places += [src, sink]
-        places[ot] = (src, sink)
+        # src одновременно source и sink — токен там и начинает и заканчивает
+        src = Place(f"src_{ot}", ot, is_source=True, is_sink=True)
+        net.places += [src]
+        places[ot] = src
 
     for act, types in act_types.items():
-        # каждый переход потребляет src и производит src (токен возвращается)
-        # так объект всегда может участвовать в следующем событии
         net.transitions.append(Transition(
             id=act.replace(" ", "_"),
             activity=act,
-            preset={ot: [places[ot][0]] for ot in types},  # src
-            postset={ot: [places[ot][0]] for ot in types},  # src обратно
+            preset={ot: [places[ot]] for ot in types},
+            postset={ot: [places[ot]] for ot in types},
         ))
     net.build_index()
 
@@ -228,20 +223,66 @@ def experiment2():
         print(f"    f_tau ({ot:<12}) = {fv:.4f}")
 
     print(f"\n  Per-object fitness (all {len(result.per_object)} objects):")
-    print(f"  {'obj_id':<15} {'type':<12} {'fitness':>8} {'missing':>8} {'remaining':>10}")
-    print("  " + "-" * 58)
+    print(f"  {'obj_id':<15} {'type':<12} {'fitness':>8} {'prod':>6} {'cons':>6} {'miss':>6} {'rem':>6}")
+    print("  " + "-" * 68)
     for s in sorted(result.per_object, key=lambda x: (x.obj_type, x.obj_id)):
         flag = "  ← !" if s.fitness < 1.0 else ""
         print(f"  {s.obj_id:<15} {s.obj_type:<12} {s.fitness:>8.3f} "
-              f"{s.missing:>8} {s.remaining:>10}{flag}")
+              f"{s.produced:>6} {s.consumed:>6} {s.missing:>6} {s.remaining:>6}{flag}")
 
     # save csv
-    header = ["obj_id", "obj_type", "fitness", "missing", "remaining"]
-    rows   = [
-        [s.obj_id, s.obj_type, round(s.fitness, 4), s.missing, s.remaining]
-        for s in sorted(result.per_object, key=lambda x: (x.obj_type, x.obj_id))
+    header = ["obj_id", "obj_type", "fitness", "produced", "consumed", "missing", "remaining"]
+    rows = [
+        [s.obj_id, s.obj_type, round(s.fitness, 4),
+         s.produced, s.consumed, s.missing, s.remaining]
+        for s in sorted(result.per_object,
+                        key=lambda x: (x.obj_type, x.obj_id))
     ]
     save_csv("experiment2_top_violators.csv", rows, header)
+
+
+def experiment2_real():
+    print("\n=== Experiment 2: Real OCEL Log (real OC-PN) ===")
+
+    path = os.path.join(DATA, "example_log.jsonocel")
+    if not os.path.exists(path):
+        print(f"  File not found: {path}")
+        return
+
+    from experiments.nets import build_real_log_net
+    log = load_ocel1(path)
+    net = build_real_log_net()
+
+    result, elapsed = run_once(net, log)
+
+    print(f"\n  Global fitness : {result.fitness:.4f}")
+    print(f"  Runtime        : {elapsed:.4f} s")
+
+    ft = result.fitness_by_type()
+    print(f"\n  Per-type fitness:")
+    for ot, fv in sorted(ft.items()):
+        print(f"    f_tau ({ot:<12}) = {fv:.4f}")
+
+    print(f"\n  Per-object fitness:")
+    print(f"  {'obj_id':<15} {'type':<12} {'fitness':>8} "
+          f"{'prod':>6} {'cons':>6} {'miss':>6} {'rem':>6}")
+    print("  " + "-" * 68)
+    for s in sorted(result.per_object,
+                    key=lambda x: (x.obj_type, x.obj_id)):
+        flag = "  ← !" if s.fitness < 1.0 else ""
+        print(f"  {s.obj_id:<15} {s.obj_type:<12} {s.fitness:>8.3f} "
+              f"{s.produced:>6} {s.consumed:>6} "
+              f"{s.missing:>6} {s.remaining:>6}{flag}")
+
+    header = ["obj_id", "obj_type", "fitness",
+              "produced", "consumed", "missing", "remaining"]
+    rows = [
+        [s.obj_id, s.obj_type, round(s.fitness, 4),
+         s.produced, s.consumed, s.missing, s.remaining]
+        for s in sorted(result.per_object,
+                        key=lambda x: (x.obj_type, x.obj_id))
+    ]
+    save_csv("experiment2_real_net.csv", rows, header)
 
 
 # ── Scalability ───────────────────────────────────────────────────────
@@ -253,10 +294,10 @@ def scalability():
     print("  deviation_rate = 0.0  |  seed = 42")
     separator()
 
-    net    = build_order_fulfilment_net()
-    sizes  = [25, 50, 100, 200, 400, 800]
+    net = build_order_fulfilment_net()
+    sizes = [25, 50, 100, 200, 400, 800]
     header = ["n_orders", "n_events", "n_objects", "time_s"]
-    rows   = []
+    rows = []
 
     print(f"\n  {'n_orders':>9} {'n_events':>9} {'n_objects':>10} {'time':>8}")
     print("  " + "-" * 42)
@@ -269,7 +310,7 @@ def scalability():
 
         factor = ""
         if prev_time is not None and prev_time > 0:
-            factor = f"  (×{elapsed/prev_time:.2f})"
+            factor = f"  (×{elapsed / prev_time:.2f})"
         prev_time = elapsed
 
         print(f"  {n:>9} {len(log.events):>9} {n_obj:>10} "
@@ -285,7 +326,7 @@ def scalability():
 
 if __name__ == "__main__":
     os.makedirs(RESULTS, exist_ok=True)
-    os.makedirs(DATA,    exist_ok=True)
+    os.makedirs(DATA, exist_ok=True)
 
     # open Tee — everything printed after this line goes to both
     # console and results/run_log.txt
@@ -299,6 +340,7 @@ if __name__ == "__main__":
     try:
         experiment1()
         experiment2()
+        experiment2_real()
         scalability()
     finally:
         print(f"\nFinished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

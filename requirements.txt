@@ -1,8 +1,12 @@
-# OC-TBR — requirements
-# Core library: no mandatory dependencies (stdlib only)
+# core experiments
+pm4py>=2.7.0
+pandas>=1.5.0
+numpy>=1.23.0
+matplotlib>=3.6.0
 
-# For running experiments
-pytest>=7.0
+# tests
+pytest>=7.0.0
 
-# Optional: load real OCEL 2.0 logs and alignment baseline
-# pm4py>=2.7
+# alignment baseline uses a SEPARATE Python 3.9 environment
+# see alignment_baseline/README.md
+# do NOT install pm4py==2.2.19.1 here — it conflicts with the main env

@@ -10,6 +10,7 @@ Run from project root:
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
@@ -29,9 +30,9 @@ def make_conformant_log():
     """
     return OCELLog(events=[
         OCEvent("e1", "Place Order", 1.0, [("o1", "order")]),
-        OCEvent("e2", "Pack Items",  2.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
-        OCEvent("e3", "Pay",         3.0, [("o1", "order")]),
-        OCEvent("e4", "Ship Order",  4.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e2", "Pack Items", 2.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e3", "Pay", 3.0, [("o1", "order")]),
+        OCEvent("e4", "Ship Order", 4.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
     ])
 
 
@@ -44,11 +45,11 @@ def make_deviant_log():
     return OCELLog(events=[
         OCEvent("e1", "Place Order", 1.0, [("o1", "order")]),
         OCEvent("e2", "Place Order", 2.0, [("o2", "order")]),
-        OCEvent("e3", "Pack Items",  3.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
-        OCEvent("e4", "Pay",         4.0, [("o1", "order")]),
-        OCEvent("e5", "Pay",         5.0, [("o2", "order")]),   # o2 skips Pack
-        OCEvent("e6", "Ship Order",  6.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
-        OCEvent("e7", "Ship Order",  7.0, [("o2", "order"), ("i3", "item")]),
+        OCEvent("e3", "Pack Items", 3.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e4", "Pay", 4.0, [("o1", "order")]),
+        OCEvent("e5", "Pay", 5.0, [("o2", "order")]),  # o2 skips Pack
+        OCEvent("e6", "Ship Order", 6.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e7", "Ship Order", 7.0, [("o2", "order"), ("i3", "item")]),
     ])
 
 
@@ -62,8 +63,8 @@ def make_counterexample_log():
     return OCELLog(events=[
         OCEvent("e1", "Place Order", 1.0, [("o1", "order")]),
         OCEvent("e2", "Place Order", 2.0, [("o2", "order")]),
-        OCEvent("e3", "Pack Items",  3.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
-        OCEvent("e4", "Ship Order",  4.0, [("o2", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e3", "Pack Items", 3.0, [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e4", "Ship Order", 4.0, [("o2", "order"), ("i1", "item"), ("i2", "item")]),
     ])
 
 
@@ -192,7 +193,7 @@ class TestSoundness:
                 if any(oid == obj_id for oid, _ in e.objects)
             ]
             proj_log = OCELLog(events=proj_events)
-            result   = OCTokenReplay(net).run(proj_log)
+            result = OCTokenReplay(net).run(proj_log)
             s = next((x for x in result.per_object if x.obj_id == obj_id), None)
             missing = s.missing if s else 0
             assert missing == 0, \
@@ -204,7 +205,7 @@ class TestSoundness:
         Global OC-TBR must detect the binding violation that
         per-object projection misses.
         """
-        log    = make_counterexample_log()
+        log = make_counterexample_log()
         result = replay.run(log)
         total_missing = sum(s.missing for s in result.per_object)
         assert total_missing > 0, \
@@ -212,7 +213,7 @@ class TestSoundness:
 
     def test_global_fitness_below_one_in_counterexample(self, replay):
         """Global fitness must be < 1.0 while per-object projections see 1.0."""
-        log    = make_counterexample_log()
+        log = make_counterexample_log()
         result = replay.run(log)
         assert result.fitness < 1.0
 
@@ -233,8 +234,8 @@ class TestFormulas:
             if s.consumed == 0 and s.produced == 0:
                 continue
             expected = 1 - 0.5 * (
-                (s.missing   / s.consumed  if s.consumed  > 0 else 0) +
-                (s.remaining / s.produced  if s.produced  > 0 else 0)
+                    (s.missing / s.consumed if s.consumed > 0 else 0) +
+                    (s.remaining / s.produced if s.produced > 0 else 0)
             )
             assert s.fitness == pytest.approx(expected, abs=1e-9), \
                 f"f_o formula mismatch for {s.obj_id}: " \
@@ -251,13 +252,13 @@ class TestFormulas:
             group = [s for s in result.per_object if s.obj_type == tau]
             if not group:
                 continue
-            p_sum = sum(s.produced  for s in group)
-            c_sum = sum(s.consumed  for s in group)
-            m_sum = sum(s.missing   for s in group)
+            p_sum = sum(s.produced for s in group)
+            c_sum = sum(s.consumed for s in group)
+            m_sum = sum(s.missing for s in group)
             r_sum = sum(s.remaining for s in group)
             expected = 1 - 0.5 * (
-                (m_sum / c_sum if c_sum > 0 else 0) +
-                (r_sum / p_sum if p_sum > 0 else 0)
+                    (m_sum / c_sum if c_sum > 0 else 0) +
+                    (r_sum / p_sum if p_sum > 0 else 0)
             )
             assert ft[tau] == pytest.approx(expected, abs=1e-9), \
                 f"f_tau formula mismatch for type={tau}"
@@ -282,7 +283,7 @@ class TestFormulas:
     def test_conformant_better_than_deviant(self, replay):
         """Conformant log must always score higher than deviant log."""
         r_good = replay.run(make_conformant_log())
-        r_bad  = replay.run(make_deviant_log())
+        r_bad = replay.run(make_deviant_log())
         assert r_good.fitness > r_bad.fitness
 
 
@@ -327,7 +328,7 @@ class TestEdgeCases:
         the sum of the corresponding per-object counters.
         """
         result = replay.run(make_deviant_log())
-        assert result.P_g == sum(s.produced  for s in result.per_object), "P_g mismatch"
-        assert result.C_g == sum(s.consumed  for s in result.per_object), "C_g mismatch"
-        assert result.M_g == sum(s.missing   for s in result.per_object), "M_g mismatch"
+        assert result.P_g == sum(s.produced for s in result.per_object), "P_g mismatch"
+        assert result.C_g == sum(s.consumed for s in result.per_object), "C_g mismatch"
+        assert result.M_g == sum(s.missing for s in result.per_object), "M_g mismatch"
         assert result.R_g == sum(s.remaining for s in result.per_object), "R_g mismatch"
