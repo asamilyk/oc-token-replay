@@ -30,7 +30,7 @@ The algorithm **OC-TBR** produces three fitness metrics:
 ## Quick start
 
 ```bash
-git clone https://github.com/apsamilyk/oc-token-replay
+git clone https://github.com/asamilyk/oc-token-replay
 cd oc-token-replay
 pip install -r requirements.txt
 
