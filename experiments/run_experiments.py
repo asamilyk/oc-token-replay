@@ -22,8 +22,9 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 RESULTS = os.path.join(ROOT, "results")
 DATA = os.path.join(ROOT, "data")
 
+from collections import Counter
 from src.replay import OCTokenReplay
-from experiments.logs import generate_synthetic_log, load_ocel1
+from experiments.logs import generate_synthetic_log, load_ocel1, generate_log_with_swap
 from experiments.nets import build_order_fulfilment_net
 
 
@@ -83,12 +84,13 @@ def experiment1():
     net = build_order_fulfilment_net()
 
     configs = [
-        ("A", "none  (baseline)", 0.0),
-        ("B", "20% skip Pack", 0.2),
-        ("C", "40% skip Pack", 0.4),
+        ("A", "none (baseline)", "skip", 0.0),
+        ("B", "20% skip Pack", "skip", 0.2),
+        ("C", "40% skip Pack", "skip", 0.4),
+        ("D", "20% swapped order", "swap", 0.2),
     ]
 
-    header = ["log", "deviation", "f", "f_order", "f_item",
+    header = ["log", "deviation", "dev_type", "f", "f_order", "f_item",
               "n_events", "n_objects", "time_s"]
     rows = []
 
@@ -96,23 +98,28 @@ def experiment1():
           f"{'f_item':>7} {'events':>7} {'objects':>8} {'time':>7}")
     print("-" * 65)
 
-    for name, desc, rate in configs:
-        log = generate_synthetic_log(n_orders=100,
-                                     deviation_rate=rate,
-                                     seed=42)
+    for name, desc, dev_type, rate in configs:
+        if dev_type == "skip":
+            log = generate_synthetic_log(n_orders=100,
+                                         deviation_rate=rate,
+                                         seed=42)
+        elif dev_type == "swap":
+            log = generate_log_with_swap()
+
         result, elapsed = run_once(net, log)
         ft = result.fitness_by_type()
 
         f = round(result.fitness, 4)
         f_order = round(ft.get("order", 0.0), 4)
         f_item = round(ft.get("item", 0.0), 4)
-        n_obj = len(result.per_object)
 
-        print(f"Log {name:<2} {desc:<22} {f:>6.3f} {f_order:>8.3f} "
-              f"{f_item:>7.3f} {len(log.events):>7} {n_obj:>8} {elapsed:>6.3f}s")
+        print(f"Log {name:<2} {desc:<25} "
+              f"{f:>6.3f} {f_order:>8.3f} "
+              f"{f_item:>7.3f} {len(log.events):>7} {elapsed:>6.3f}s")
 
-        rows.append([name, desc, f, f_order, f_item,
-                     len(log.events), n_obj, round(elapsed, 4)])
+        rows.append([name, desc, dev_type, f, f_order, f_item,
+                     len(log.events), len(result.per_object),
+                     round(elapsed, 4)])
 
     save_csv("experiment1.csv", rows, header)
 
@@ -146,6 +153,49 @@ def experiment1():
     vc = Counter(s.obj_type for s in violators)
     for ot, n in vc.most_common():
         print(f"  Violating {ot:<10}: {n} objects")
+
+    # ── per-object breakdown для Log D ───────────────────────────────────
+    print()
+    print("-" * 65)
+    print("  Per-object breakdown — Log D (top violators)")
+    print("-" * 65)
+
+    log_d = generate_log_with_swap()
+    result_d, _ = run_once(net, log_d)
+
+    violators = sorted([s for s in result_d.per_object if s.fitness < 1.0],
+                       key=lambda s: s.fitness)
+    conformant = [s for s in result_d.per_object if s.fitness == 1.0]
+
+    print(f"\n  Total objects   : {len(result_d.per_object)}")
+    print(f"  Conformant      : {len(conformant)}  (f_o = 1.000)")
+    print(f"  Violators       : {len(violators)}  (f_o < 1.000)")
+
+    print(f"\n  {'obj_id':<10} {'type':<8} {'fitness':>8} "
+          f"{'prod':>6} {'cons':>6} {'miss':>6} {'rem':>6}")
+    print("  " + "-" * 56)
+    for s in violators[:15]:
+        print(f"  {s.obj_id:<10} {s.obj_type:<8} {s.fitness:>8.3f} "
+              f"{s.produced:>6} {s.consumed:>6} "
+              f"{s.missing:>6} {s.remaining:>6}")
+    if len(violators) > 15:
+        print(f"  ... ({len(violators) - 15} more violators not shown)")
+
+    vc = Counter(s.obj_type for s in violators)
+    print()
+    for ot, n in vc.most_common():
+        print(f"  Violating {ot:<10}: {n} objects")
+
+    csv_path = os.path.join(RESULTS, "experiment1_logD_violators.csv")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["obj_id", "obj_type", "fitness",
+                    "produced", "consumed", "missing", "remaining"])
+        for s in sorted(result_d.per_object,
+                        key=lambda x: (x.obj_type, x.fitness)):
+            w.writerow([s.obj_id, s.obj_type, round(s.fitness, 4),
+                        s.produced, s.consumed, s.missing, s.remaining])
+    print(f"\n  Saved → {csv_path}")
 
 
 # ── Experiment 2: real OCEL log ───────────────────────────────────────
@@ -193,7 +243,6 @@ def experiment2():
     net = OCPetriNet()
     places = {}
     for ot in obj_types:
-        # src одновременно source и sink — токен там и начинает и заканчивает
         src = Place(f"src_{ot}", ot, is_source=True, is_sink=True)
         net.places += [src]
         places[ot] = src
@@ -328,8 +377,6 @@ if __name__ == "__main__":
     os.makedirs(RESULTS, exist_ok=True)
     os.makedirs(DATA, exist_ok=True)
 
-    # open Tee — everything printed after this line goes to both
-    # console and results/run_log.txt
     log_path = os.path.join(RESULTS, "run_log.txt")
     tee = Tee(log_path)
     sys.stdout = tee

@@ -99,3 +99,52 @@ def load_ocel1(path: str) -> OCELLog:
 
     events.sort(key=lambda e: e.timestamp)
     return OCELLog(events=events)
+
+
+def generate_log_with_swap():
+    """
+        Small hand-crafted log for Log D illustration.
+        5 orders, 2 deviant (o2, o4) — Pay fires before Pack Items.
+        Easy to trace manually.
+        """
+    return OCELLog(events=[
+        # Place Order — all
+        OCEvent("e1", "Place Order", 1.0, [("o1", "order")]),
+        OCEvent("e2", "Place Order", 2.0, [("o2", "order")]),
+        OCEvent("e3", "Place Order", 3.0, [("o3", "order")]),
+        OCEvent("e4", "Place Order", 4.0, [("o4", "order")]),
+        OCEvent("e5", "Place Order", 5.0, [("o5", "order")]),
+
+        # o2, o4 deviant: Pay fires BEFORE Pack Items
+        OCEvent("e6", "Pay", 6.0, [("o2", "order")]),
+        OCEvent("e7", "Pay", 7.0, [("o4", "order")]),
+
+        # Pack Items — all orders + their items
+        OCEvent("e8", "Pack Items", 8.0,
+                [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e9", "Pack Items", 9.0,
+                [("o2", "order"), ("i3", "item")]),
+        OCEvent("e10", "Pack Items", 10.0,
+                [("o3", "order"), ("i4", "item"), ("i5", "item")]),
+        OCEvent("e11", "Pack Items", 11.0,
+                [("o4", "order"), ("i6", "item")]),
+        OCEvent("e12", "Pack Items", 12.0,
+                [("o5", "order"), ("i7", "item"), ("i8", "item")]),
+
+        # Pay — conformant orders only (o1, o3, o5)
+        OCEvent("e13", "Pay", 13.0, [("o1", "order")]),
+        OCEvent("e14", "Pay", 14.0, [("o3", "order")]),
+        OCEvent("e15", "Pay", 15.0, [("o5", "order")]),
+
+        # Ship Order — all
+        OCEvent("e16", "Ship Order", 16.0,
+                [("o1", "order"), ("i1", "item"), ("i2", "item")]),
+        OCEvent("e17", "Ship Order", 17.0,
+                [("o2", "order"), ("i3", "item")]),
+        OCEvent("e18", "Ship Order", 18.0,
+                [("o3", "order"), ("i4", "item"), ("i5", "item")]),
+        OCEvent("e19", "Ship Order", 19.0,
+                [("o4", "order"), ("i6", "item")]),
+        OCEvent("e20", "Ship Order", 20.0,
+                [("o5", "order"), ("i7", "item"), ("i8", "item")]),
+    ])

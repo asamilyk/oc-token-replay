@@ -44,6 +44,7 @@ def save(fig, name):
 # ── Figure 1: Fitness vs Deviation Rate ──────────────────────────────
 def fig_fitness():
     df = pd.read_csv(os.path.join(RESULTS, "experiment1.csv"))
+    df = df[df["log"].isin(["A", "B", "C"])].reset_index(drop=True)
     rates = [0, 20, 40]
 
     fig, ax = plt.subplots(figsize=(3.4, 2.8))
@@ -53,8 +54,10 @@ def fig_fitness():
     ax.plot(rates, df["f_order"], "s--", color=BLUE, label=r"$f_{\tau=\mathrm{order}}$")
     ax.plot(rates, df["f_item"], "^:", color=LBLUE, label=r"$f_{\tau=\mathrm{item}}$")
 
-    for xv, yv in zip(rates, df["f"]):
-        ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(0, 7),
+
+    offsets = [7, 14, 7]
+    for xv, yv, off in zip(rates, df["f"], offsets):
+        ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(0, off),
                     textcoords="offset points", ha="center",
                     fontsize=7.5, color=NAVY, fontweight="bold")
 
@@ -63,7 +66,7 @@ def fig_fitness():
     ax.set_title("OC-TBR Fitness vs Deviation Rate")
     ax.set_xticks(rates)
     ax.set_xticklabels(["0 %\n(Log A)", "20 %\n(Log B)", "40 %\n(Log C)"])
-    ax.set_ylim(0.70, 1.10)
+    ax.set_ylim(0.70, 1.12)
     ax.legend(loc="lower left")
 
     fig.tight_layout()
@@ -79,18 +82,19 @@ def fig_comparison():
     fig, ax = plt.subplots(figsize=(3.4, 2.8))
     fig.canvas.manager.set_window_title("Fig 2 — OC-TBR vs Alignments (fitness)")
 
-    ax.plot(rates, df["octbr_fitness"], "o-", color=NAVY,
-            label="OC-TBR (ours)")
-    ax.plot(rates, df["oc_align_fitness"], "s--", color=RED,
-            label="OC Alignments [2]")
+    ax.plot(rates, df["octbr_fitness"], "o-", color=NAVY, label="OC-TBR (ours)")
+    ax.plot(rates, df["oc_align_fitness"], "s--", color=RED, label="OC Alignments [2]")
 
-    # annotate both lines
+
     for xv, yv in zip(rates, df["octbr_fitness"]):
-        ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(6, 2),
+        ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(-18, 6),
                     textcoords="offset points",
                     fontsize=7, color=NAVY, fontweight="bold")
-    for xv, yv in zip(rates, df["oc_align_fitness"]):
-        ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(6, -10),
+
+
+    align_offsets = [-12, -14, -12]
+    for xv, yv, off in zip(rates, df["oc_align_fitness"], align_offsets):
+        ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(-18, off),
                     textcoords="offset points",
                     fontsize=7, color=RED, fontweight="bold")
 
@@ -99,22 +103,8 @@ def fig_comparison():
     ax.set_title("OC-TBR vs OC Alignments — Fitness")
     ax.set_xticks(rates)
     ax.set_xticklabels(["0 %\n(Log A)", "20 %\n(Log B)", "40 %\n(Log C)"])
-    ax.set_ylim(0.50, 1.10)
+    ax.set_ylim(0.50, 1.12)
     ax.legend(loc="lower left")
-
-    for xv, y1, y2 in zip(rates,
-                          df["octbr_fitness"],
-                          df["oc_align_fitness"]):
-        if abs(y1 - y2) > 0.01:
-            mid = (y1 + y2) / 2
-            ax.annotate(
-                f"Δ={y1 - y2:.2f}",
-                xy=(xv, mid),
-                xytext=(18, 0), textcoords="offset points",
-                fontsize=6.5, color=GRAY,
-                arrowprops=dict(arrowstyle="-", color=GRAY,
-                                lw=0.8, linestyle="dotted"),
-            )
 
     fig.tight_layout()
     save(fig, "comparison_alignments")
@@ -143,20 +133,26 @@ def fig_runtime():
     ax.set_title("Runtime: OC-TBR vs OC Alignments")
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
-    ax.legend(loc="upper right")
+
+    ax.legend(loc="lower right", fontsize=7.5)
 
     for bar, val in zip(b1, [t * 1000 for t in tbr_s]):
         ax.text(bar.get_x() + bar.get_width() / 2,
-                bar.get_height() * 2.8,
+                bar.get_height() * 1.8,
                 f"{val:.1f} ms",
                 ha="center", va="bottom", fontsize=7,
-                color=NAVY, fontweight="bold")
-    for bar, val in zip(b2, aln_s):
+                color="white", fontweight="bold")
+
+    aln_labels_y = [v * 1.3 for v in aln_s]
+    for bar, val, y in zip(b2, aln_s, aln_labels_y):
         ax.text(bar.get_x() + bar.get_width() / 2,
-                bar.get_height() * 2.8,
+                y,
                 f"{val:.1f} s",
                 ha="center", va="bottom", fontsize=7,
                 color=RED, fontweight="bold")
+
+    ax.set_ylim(bottom=ax.get_ylim()[0],
+                top=max(aln_s) * 8)
 
     fig.tight_layout()
     save(fig, "runtime_comparison")
@@ -195,6 +191,58 @@ def fig_scalability():
     return fig
 
 
+# ── Figure 5: Auto vs Manual OC-PN ───────────────────────────────────
+def fig_auto_vs_manual():
+    objects = ["i1\n(Item)", "i2\n(Item)", "p1\n(Package)"]
+    f_auto = [0.8333, 0.4500, 1.0000]
+    f_manual = [0.8333, 0.8750, 1.0000]
+
+    x = np.arange(len(objects))
+    width = 0.32
+
+    fig, ax = plt.subplots(figsize=(3.8, 2.8))
+    fig.canvas.manager.set_window_title("Fig 5 — Auto vs Manual")
+
+    b1 = ax.bar(x - width / 2, f_auto, width,
+                label="Auto (pm4py)", color=NAVY, alpha=0.85)
+    b2 = ax.bar(x + width / 2, f_manual, width,
+                label="Manual OC-PN", color=BLUE, alpha=0.85)
+
+    for bar, val in zip(b1, f_auto):
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.012,
+                f"{val:.3f}", ha="center", fontsize=7.5,
+                color=NAVY, fontweight="bold")
+    for bar, val in zip(b2, f_manual):
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.012,
+                f"{val:.3f}", ha="center", fontsize=7.5,
+                color=BLUE, fontweight="bold")
+
+    arrow_x = x[1] - width / 2 + 0.2
+    ax.annotate("",
+                xy=(arrow_x, f_manual[1]),
+                xytext=(arrow_x, f_auto[1]),
+                arrowprops=dict(arrowstyle="<->", color=RED, lw=1.5))
+    ax.text(arrow_x - 0.08,
+            (f_auto[1] + f_manual[1]) / 2,
+            f"Δ={f_manual[1] - f_auto[1]:.3f}",
+            fontsize=7.5, color=RED, fontweight="bold",
+            va="center", ha="right")
+
+    ax.set_ylabel("Per-object fitness $f_o$")
+    ax.set_title("Paper Example: Auto vs Manual OC-PN")
+    ax.set_xticks(x)
+    ax.set_xticklabels(objects)
+    ax.set_ylim(0.3, 1.18)
+    ax.set_xlim(-0.7, 2.6)
+    ax.legend(loc="lower right", fontsize=7.5)
+
+    fig.tight_layout()
+    save(fig, "auto_vs_manual")
+    return fig
+
+
 # ── Entry point ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("Generating figures...\n")
@@ -207,6 +255,8 @@ if __name__ == "__main__":
     f3 = fig_runtime()
     print("Figure 4: scalability");
     f4 = fig_scalability()
+    print("Figure 5: auto_vs_manual")
+    f5 = fig_auto_vs_manual()
 
     print(f"\nAll saved to: {FIGS}/")
 

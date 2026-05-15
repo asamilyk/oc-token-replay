@@ -1,5 +1,5 @@
 OC-TBR Experimental Run
-Started: 2026-05-11 11:43:31
+Started: 2026-05-15 09:41:08
 =================================================================
   EXPERIMENT 1 — Synthetic Logs
   OC-PN: order-fulfilment (Fig. 1)
@@ -8,9 +8,10 @@ Started: 2026-05-11 11:43:31
 
 Log   Deviation                   f  f_order  f_item  events  objects    time
 -----------------------------------------------------------------
-Log A  none  (baseline)        1.000    1.000   1.000     400      337  0.081s
-Log B  20% skip Pack           0.938    0.953   0.926     380      337  0.075s
-Log C  40% skip Pack           0.842    0.901   0.790     360      337  0.131s
+Log A  none (baseline)            1.000    1.000   1.000     400  0.079s
+Log B  20% skip Pack              0.938    0.953   0.926     380  0.078s
+Log C  40% skip Pack              0.842    0.901   0.790     360  0.077s
+Log D  20% swapped order          0.952    0.910   1.000      20  0.000s
   saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\experiment1.csv
 
 -----------------------------------------------------------------
@@ -22,18 +23,35 @@ Log C  40% skip Pack           0.842    0.901   0.790     360      337  0.131s
   Violators       : 138  (f_o < 1.000)
   obj_id     type      fitness   prod   cons   miss    rem
   ----------------------------------------------------------
+  i41        item        0.250      2      1      1      1
+  i148       item        0.250      2      1      1      1
+  i3         item        0.250      2      1      1      1
+  i25        item        0.250      2      1      1      1
+  i68        item        0.250      2      1      1      1
   i84        item        0.250      2      1      1      1
-  i222       item        0.250      2      1      1      1
-  i217       item        0.250      2      1      1      1
-  i218       item        0.250      2      1      1      1
-  i74        item        0.250      2      1      1      1
+  i127       item        0.250      2      1      1      1
   i5         item        0.250      2      1      1      1
-  i126       item        0.250      2      1      1      1
-  i219       item        0.250      2      1      1      1
   ... (126 more violators not shown)
 
   Violating item      : 98 objects
   Violating order     : 40 objects
+
+-----------------------------------------------------------------
+  Per-object breakdown — Log D (top violators)
+-----------------------------------------------------------------
+
+  Total objects   : 13
+  Conformant      : 11  (f_o = 1.000)
+  Violators       : 2  (f_o < 1.000)
+
+  obj_id     type      fitness   prod   cons   miss    rem
+  --------------------------------------------------------
+  o2         order       0.775      5      4      1      1
+  o4         order       0.775      5      4      1      1
+
+  Violating order     : 2 objects
+
+  Saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\experiment1_logD_violators.csv
 
 =================================================================
   EXPERIMENT 2 — Real OCEL Log
@@ -118,16 +136,16 @@ Log C  40% skip Pack           0.842    0.901   0.790     360      337  0.131s
 
    n_orders  n_events  n_objects     time
   ------------------------------------------
-         25       100         78  0.0096s
-         50       200        156  0.0185s  (×1.92)
-        100       400        337  0.0971s  (×5.24)
-        200       800        675  0.2838s  (×2.92)
-        400      1600       1367  1.1445s  (×4.03)
-        800      3200       2810  4.9019s  (×4.28)
+         25       100         78  0.0055s
+         50       200        156  0.0225s  (×4.10)
+        100       400        337  0.0791s  (×3.51)
+        200       800        675  0.2576s  (×3.26)
+        400      1600       1367  1.0446s  (×4.06)
+        800      3200       2810  6.4604s  (×6.18)
   saved → C:\Users\Настя\Documents\GitHub\oc-token-replay\results\scalability.csv
 
   Factor column shows runtime ratio relative to previous row.
   Expected: close to 2.0 at each doubling (linear scaling).
 
-Finished: 2026-05-11 11:43:38
+Finished: 2026-05-15 09:41:16
 Full log saved to: C:\Users\Настя\Documents\GitHub\oc-token-replay\results\run_log.txt

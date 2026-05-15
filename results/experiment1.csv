@@ -1,4 +1,5 @@
-log,deviation,f,f_order,f_item,n_events,n_objects,time_s
-A,none  (baseline),1.0,1.0,1.0,400,337,0.0806
-B,20% skip Pack,0.9382,0.9529,0.9262,380,337,0.0745
-C,40% skip Pack,0.8419,0.901,0.7897,360,337,0.1311
+log,deviation,dev_type,f,f_order,f_item,n_events,n_objects,time_s
+A,none (baseline),skip,1.0,1.0,1.0,400,337,0.0792
+B,20% skip Pack,skip,0.9382,0.9529,0.9262,380,337,0.0778
+C,40% skip Pack,skip,0.8419,0.901,0.7897,360,337,0.0775
+D,20% swapped order,swap,0.9518,0.91,1.0,20,13,0.0003
