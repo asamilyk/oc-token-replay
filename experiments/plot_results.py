@@ -54,7 +54,6 @@ def fig_fitness():
     ax.plot(rates, df["f_order"], "s--", color=BLUE, label=r"$f_{\tau=\mathrm{order}}$")
     ax.plot(rates, df["f_item"], "^:", color=LBLUE, label=r"$f_{\tau=\mathrm{item}}$")
 
-
     offsets = [7, 14, 7]
     for xv, yv, off in zip(rates, df["f"], offsets):
         ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(0, off),
@@ -76,6 +75,10 @@ def fig_fitness():
 
 # ── Figure 2: Fitness comparison OC-TBR vs Alignments ────────────────
 def fig_comparison():
+    csv_path = os.path.join(RESULTS, "comparison_oc_alignments.csv")
+    if not os.path.exists(csv_path):
+        print("  SKIP: comparison_oc_alignments.csv not found")
+        return None
     df = pd.read_csv(os.path.join(RESULTS, "comparison_oc_alignments.csv"))
     rates = [0, 20, 40]
 
@@ -85,12 +88,10 @@ def fig_comparison():
     ax.plot(rates, df["octbr_fitness"], "o-", color=NAVY, label="OC-TBR (ours)")
     ax.plot(rates, df["oc_align_fitness"], "s--", color=RED, label="OC Alignments [2]")
 
-
     for xv, yv in zip(rates, df["octbr_fitness"]):
         ax.annotate(f"{yv:.3f}", xy=(xv, yv), xytext=(-18, 6),
                     textcoords="offset points",
                     fontsize=7, color=NAVY, fontweight="bold")
-
 
     align_offsets = [-12, -14, -12]
     for xv, yv, off in zip(rates, df["oc_align_fitness"], align_offsets):
@@ -113,6 +114,18 @@ def fig_comparison():
 
 # ── Figure 3: Runtime — OC-TBR vs Alignments ─────────────────────────
 def fig_runtime():
+    csv_path = os.path.join(RESULTS, "comparison_oc_alignments.csv")
+    if not os.path.exists(csv_path):
+        print("  SKIP: comparison_oc_alignments.csv not found — "
+              "run python -m experiments.run_comparison first")
+        return None
+
+    df = pd.read_csv(csv_path)
+
+    if df["oc_align_time_s"].isna().any():
+        print("  SKIP: alignment results incomplete (N/A values) — "
+              "run python -m experiments.run_comparison first")
+        return None
     df = pd.read_csv(os.path.join(RESULTS, "comparison_oc_alignments.csv"))
     tbr_s = df["octbr_time_s"].tolist()
     aln_s = df["oc_align_time_s"].tolist()
@@ -260,4 +273,6 @@ if __name__ == "__main__":
 
     print(f"\nAll saved to: {FIGS}/")
 
-    plt.show()
+    figs = [f for f in [f1, f2, f3, f4, f5] if f is not None]
+    if figs:
+        plt.show()

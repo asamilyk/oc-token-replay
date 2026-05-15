@@ -38,6 +38,7 @@ source venv_39/bin/activate
 ```bash
 pip install "pm4py==2.2.19.1" "packaging==21.3" "deprecation==2.1.0"
 pip install networkx matplotlib cvxopt
+pip install jsonschema
 ```
 
 **Step 5:** Verify:
@@ -45,10 +46,22 @@ pip install networkx matplotlib cvxopt
 ```bash
 python -c "from algorithm import calculate_oc_alignments; print('OK')"
 ```
+**Step 6:** Return to the main project folder and switch back to the
+main environment:
 
-## Running the comparison
+```powershell
+# Windows
+cd ..\oc-token-replay
+deactivate
+.\.venv\Scripts\activate
 
-From the main project root (using the main venv, not venv_39):
+# macOS / Linux
+cd ../oc-token-replay
+deactivate
+source .venv/bin/activate
+```
+
+Then run the comparison from the project root:
 
 ```bash
 python -m experiments.run_comparison

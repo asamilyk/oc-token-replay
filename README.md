@@ -47,18 +47,20 @@ python run_conformance.py data/your_log.jsonocel --show-net
 
 ## Reproducing paper results
 
+Run in this order — each step generates data needed by the next:
+
 ```bash
-# Experiments 1 + 2 — synthetic logs + parsing validation
+# Step 1 — synthetic logs + parsing validation
 python -m experiments.run_experiments
 
-# Experiments 3 + 4 — three real OCEL logs + auto vs manual OC-PN
+# Step 2 — three real OCEL logs + auto vs manual OC-PN
 python -m experiments.run_real_logs
 
-# Experiment 5 — comparison with OC Alignments [Liss et al., 2023]
+# Step 3 — comparison with OC Alignments [Liss et al., 2023]
 # requires Python 3.9 venv — see alignment_baseline/README.md
 python -m experiments.run_comparison
 
-# generate all figures (PDF + PNG)
+# Step 4 — all figures (run after steps 1–3)
 python -m experiments.plot_results
 ```
 
@@ -112,7 +114,7 @@ oc-token-replay/
 ├── figures/                    # auto-generated PDF/PNG figures (git-ignored)
 │
 ├── tests/
-│   └── test_replay.py          # 17 unit tests
+│   └── test_replay.py          # 22 unit tests
 │
 ├── run_conformance.py          # universal runner for any OCEL log
 ├── requirements.txt
@@ -184,12 +186,13 @@ pytest tests/ -v
 ```
 
 Tests cover:
-- Proposition 1 — unsoundness of per-object projection (Section IV)
-- Perfect conformance → f = 1.0, no missing tokens
-- Known violations → correct per-object flagging
-- All three fitness formulae (Eq. 1–3)
-- Edge cases: empty log, unknown activities
-
+- Perfect conformance → f = 1.0, no missing tokens (TestPerfectConformance)
+- Known violations → correct per-object flagging (TestViolations)
+- Activity-swap deviation → missing and remaining tokens detected
+- Unsoundness of per-object projection (TestSoundness)
+- All three fitness formulae, Eq. 1–3 (TestFormulas)
+- Global counter consistency P_g/C_g/M_g/R_g (TestCounters)
+- Edge cases: empty log, unknown activities, large log (TestEdgeCases)
 ---
 
 ## Data
@@ -230,7 +233,7 @@ pip install -r requirements.txt
 ## Citation
 
 ```bibtex
-@article{samilyk2026octbr,
+@article{samilyk2026,
   author  = {Samilyk, Anastasia},
   title   = {Conformance Checking of Object-Centric Petri Nets
              and Event Logs using a Token Replay Approach},
